@@ -1,4 +1,4 @@
-FRR <- function(r) {
+FRR <- function(r, on_total=T) {
     mod <- r$mod
     fp <- r$fp
     pa <- r$pa
@@ -9,9 +9,10 @@ FRR <- function(r) {
 
     ## FRR by HIV age groups (coarse age groups)
     ## Note: calculation restricted to only sexually active population
-    frr_ha <- (colSums(fp$frr_cd4 * mod$hivpop[, 1:20, 2, ]) + 
-    colSums(fp$frr_art * mod$artpop[, , 1:20, 2, ], , 2)) /
-        (colSums(mod$hivpop[, 1:20, 2, ]) + colSums(mod$artpop[, , 1:20, 2, ], , 2))
+    ha <- fp$ss$hAG - 1
+    frr_ha <- (colSums(fp$frr_cd4 * mod$hivpop[, 1:ha, 2, ]) + 
+    colSums(fp$frr_art * mod$artpop[, , 1:ha, 2, ], , 2)) /
+        (colSums(mod$hivpop[, 1:ha, 2, ]) + colSums(mod$artpop[, , 1:ha, 2, ], , 2))
         
     ## Expand to FRR by single-year age
     frr_a <- frr_ha[fp$ss$ag.idx[1:35], ]
@@ -52,6 +53,5 @@ FRR <- function(r) {
     frr_5yr <- asfr_hivp / asfr_hivn
     names(dimnames(frr_5yr))[1] <- "agegr"
 
-    frr_5yr %>% as.data.frame.table(responseName = "frr") %>%
-        type.convert()
+    list(asfr_n = asfr_hivn, asfr_p = asfr_hivp, frr = frr_5yr)
 }
