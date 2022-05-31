@@ -103,3 +103,5 @@ for (i in seq_along(iso2_list)) {
     res[[iso3_list[i]]] <- do_cc(iso2_list[i], iso3_list[i])
 }
 
+dir.create(here('fit'))
+saveRDS(res, here('fit/res.rds'))
