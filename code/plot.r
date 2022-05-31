@@ -34,14 +34,6 @@ run_a_model <- function(fit, name = "epp", vs = "R") {
 #'
 #' ## Prevalence in pregnant and non-pregnant women over time, age 15-19, 20-24
 #'
-#' Adding output for pregnant women prevalence by age-group as currently only
-#' outputting the 15-49 pregnant prevalence.
-#'
-#' $$\rho_{a, pregnant} = \dfrac{\sum_{stage} FRR_{age, state} H_{female, age, state} +
-#' FRR_{age, state, duration} H_{female, age, stage, duration}}{N_{female, age, H^-} +\sum_{stage} FRR_{age, state} H_{female, age, state} +
-#' FRR_{age, state, duration} H_{female, age, stage, duration}}
-#' $$
-#' 
 mwi_epp <- run_a_model(res$MWI, "epp_MWI")$mod$pregprev_agr %>%
     as_tibble() %>%
     rename_with(~ paste0("y_", 1:52)) %>%
@@ -121,268 +113,28 @@ mwi30 %>%
 #'
 agr_i <- c(15, 17, seq(20, 50, 5))
 
-frrX <- function(x) {
-    # AFSR by age
-    x$fp$asfr %>%
-        as.data.table(T) %>%
-        rename(age = rn) %>%
-        pivot_longer(-age, names_to = "year", values_to = "asfr") %>%
-        mutate(age = as.numeric(age), year = as.numeric(year)) %>%
-        allot(asfr_long)
-    
-    # asfr_long %>%
-    #     filter(year %in% sample(1970:2017, 6)) %>%
-    #     ggplot(aes(age, asfr, color = factor(year))) +
-    #     geom_line()
-
-    # female population size
-    x$mod$data %>%
-        as.data.table() %>%
-        rename_with(~ char(age, sex, hiv, year, n)) %>%
-        mutate(
-            age = age + 14, year = year + 1969,
-            hiv = char(neg, pos)[hiv],
-            sex = char(male, female)[sex],
-            year = as.numeric(year)
-        ) %>%
-        allot(pop_long)
-    
-    pop_long_active <- pop_long
-
-    if (x$fp$ss$MODEL == 2) {
-        x$mod$vpop %>%
-            as.data.table() %>%
-            rename_with(~ char(age, sex, hiv, year, n)) %>%
-            mutate(
-                age = age + 14, year = year + 1969,
-                hiv = char(neg, pos)[hiv],
-                sex = char(male, female)[sex],
-                year = as.numeric(year)
-            ) %>%
-            allot(vpop_long)
-        
-        # vpop_long %>%
-        #     filter(year %in% sample(1970:2017, 6)) %>%
-        #     ggplot(aes(age, n, color = hiv)) +
-        #     facet_wrap(~year) + geom_line()
-        
-        pop_long_active <- pop_long %>%
-            full_join(vpop_long, char(age, sex, hiv, year)) %>%
-            mutate(n = if_else(age <= 30, n.x - n.y, n.x))
-        
-        # pop_long %>%
-        #     filter(year %in% sample(1970:2017, 6)) %>%
-        #     ggplot(aes(age, n, color = hiv)) +
-        #     facet_wrap(~year) + geom_line()
-    } 
-
-    # female size - keep full pop so no need to adjust ASFR
-    pop_long %>%
-        filter(sex == "female") %>%
-        select(age, hiv, year, n) %>%
-        pivot_wider(names_from = hiv, values_from = n) |>
-        mutate(n = neg + pos)  %>%
-        group_by(age) %>%
-        mutate(n_roll = zoo::rollmean(n, 2, , T, "right")) %>%
-        filter(
-            year %in% 1971:2017,
-            age %in% 15:49
-        ) %>%
-        allot(female_size)
-           
-    # female_size %>%
-    #     # filter(age %in% sample(15:49, 6)) %>%
-    #     ggplot(aes(year, n, color = factor(age))) +
-    #     geom_line() 
-
-    # number of births
-    female_size %>%
-        ungroup() %>%
-        left_join(asfr_long, c("age", "year")) %>%
-        mutate(
-            birth = n_roll * asfr,
-            agr = findInterval2(age, agr_i)
-        ) %>%
-        group_by(year, agr) %>%
-        summarise(birth = sum(birth)) %>%
-        allot(birth_agr) # this is kept the same between two models
-
-    # birth_agr %>%
-    #     ggplot(aes(year, birth, color = agr)) +
-    #     geom_line()
-
-    ## preg prevalence
-
-    # hiv - this part nees to take into account virgin
-    pop_long_active %>%
-        filter(sex == "female", age %in% 15:49, hiv == "neg") %>%
-        group_by(age) %>%
-        mutate(n_roll = zoo::rollmean(n, 2, , T, "right")) %>%
-        filter(year %in% 1971:2017) %>%
-        ungroup() %>%
-        mutate(agr = findInterval2(age, agr_i)) %>%
-        group_by(agr, year) %>%
-        summarise(n_roll = sum(n_roll)) %>%
-        allot(hivn)
-    hivn
-
-    # hivn %>%
-    #     # filter(age %in% sample(15:49, 6)) %>%
-    #     ggplot(aes(year, n_roll, color = factor(agr))) +
-    #     geom_line()
-
-    # hivp - this part nees to take into account virgin but it tracked separatly
-    # expect_equal(
-    #     x$mod$data[, , 2, ] %>% sum(),
-    #     (x$mod$hivpop[] %>% sum()) + (x$mod$artpop[] %>% sum()) +
-    #         (x$mod$vpopart %>% sum()) +
-    #         (x$mod$vpophiv %>% sum())
-    # )
-    x$mod$hivpop %>%
-        as.data.table() %>%
-        rename_with(~ char(stage, agr, sex, year, n)) %>%
-        filter(agr < 9, sex == 2) %>%
-        mutate(agr = ago[agr], year = 1969 + year) %>%
-        group_by(stage, agr) %>%
-        mutate(n_roll = zoo::rollmean(n, 2, , T, "right")) %>%
-        filter(year %in% 1971:2017) %>%
-        ungroup() %>%
-        select(stage, agr, year, n_roll) %>%
-        allot(hivp)
-    hivp
-
-    # hivp %>%
-    #     ggplot(aes(year, n_roll, color = agr, linetype = factor(stage))) +
-    #     facet_wrap(~stage, scales= 'free') +
-    #     geom_line()
-
-    x$fp$frr_cd4 %>%
-        as.data.table() %>%
-        rename_with(~ char(stage, agr, year, frr)) %>%
-        mutate(year = 1969 + year, agr = ago[agr]) %>%
-        right_join(hivp) %>%
-        mutate(birthx = frr * n_roll) %>%
-        group_by(agr, year) %>%
-        summarise(birth_hiv = sum(birthx)) %>%
-        allot(hivp_birthrr)
-    hivp_birthrr
-
-    # hivp_birthrr %>%
-    #     ggplot(aes(year, birth_hiv, color = agr)) + geom_line()
-
-    # art
-    x$mod$artpop %>%
-        as.data.table() %>%
-        rename_with(~ char(dur, stage, agr, sex, year, n)) %>%
-        filter(agr < 9, sex == 2) %>%
-        mutate(agr = ago[agr], year = 1969 + year) %>%
-        group_by(dur, stage, agr) %>%
-        mutate(n_roll = zoo::rollmean(n, 2, , T, "right")) %>%
-        filter(year %in% 1971:2017) %>%
-        ungroup() %>%
-        select(dur, stage, agr, year, n_roll) %>%
-        allot(art)
-    art
-
-    x$fp$frr_art %>%
-        as.data.table() %>%
-        rename_with(~ char(dur, stage, agr, year, frr)) %>%
-        mutate(year = 1969 + year, agr = ago[agr]) %>%
-        right_join(art, char(dur, stage, agr, year)) %>%
-        mutate(birthx = frr * n_roll) %>%
-        group_by(agr, year) %>%
-        summarise(birth_art = sum(birthx)) %>%
-        allot(art_birthrr)
-    art_birthrr
-
-    # art_birthrr %>%
-    #     ggplot(aes(year, birth_art, color = agr)) + geom_line()    
-
-    # prev
-    hivn %>%
-        rename(hiv_neg = n_roll) %>%
-        left_join(hivp_birthrr, char("agr", "year")) %>%
-        left_join(art_birthrr, char("agr", "year")) %>%
-        left_join(birth_agr, char("agr", "year")) %>%
-        mutate(
-            p_factor = birth_hiv + birth_art,
-            prev = p_factor / (p_factor + hiv_neg),
-            B_pos = birth * prev,
-            B_neg = birth - B_pos
-        ) %>%
-        allot(birth_status)
-    
-    birth_status
-
-    # birth_status %>%
-    # ggplot(aes(year, prev, color = agr)) + geom_line()
-
-    # birth_status %>%
-    #     ggplot(aes(year, B_pos, color = agr)) + geom_line()
-
-    pop_long %>%
-        left_join(pop_long_active %>%
-            select(n_active = n, age, sex, hiv, year)) %>%
-        group_by(age, sex, hiv) %>%
-        mutate(
-            n_roll = zoo::rollmean(n, 2, NA, TRUE, "right"),
-            n_active_roll = zoo::rollmean(n_active, 2, NA, TRUE, "right")
-        ) %>%
-        ungroup() %>%
-        filter(sex == "female", year %in% 1971:2017) %>%
-        mutate(agr = findInterval2(age, agr_i)) %>%
-        group_by(agr, hiv, year) %>%
-        summarise(n = sum(n_roll), n_active = sum(n_active_roll)) %>%
-        pivot_wider(names_from = hiv, values_from = c(n, n_active)) %>%
-        left_join(birth_status, char(agr, year)) %>%
-        mutate(
-            fr_pos = B_pos / n_pos,
-            fr_neg = B_neg / n_neg,
-            frr = fr_pos / fr_neg,
-            fr_pos_active = B_pos / n_active_pos,
-            fr_neg_active = B_neg / n_active_neg,
-            frr_active = fr_pos_active / fr_neg_active
-        ) %>%
-        allot(frr_epp)
-    list(
-        female_size = female_size,
-        birth_agr = birth_agr,
-        hiv_neg = hivn,
-        hiv_pos_rr = hivp_birthrr,
-        art_rr = art_birthrr,
-        birth_status = birth_status,
-        frr_data = frr_epp
-    )
-    # frr_epp
-}
-
 epp_mwi <- run_a_model(res$ZMB, "epp_ZMB")
-frr_epp <- frrX(epp_mwi)
-
 edb_mwi <- run_a_model(res$ZMB, "eppdb_ZMB")
-frr_edb <- frrX(edb_mwi)
 
-frr_edb$frr_data %>%
-    # select(agr, year, fr_pos, fr_neg, frr) %>%
-    select(agr, year, fr_pos_active, fr_neg_active, frr_active) %>%
-    left_join(frr_epp$frr_data %>%
-        select(agr, year, fr_pos, fr_neg, frr), char(agr, year)) %>%
-    allot(joint_frr)
+epp_frr <- FRR(epp_mwi)
+edb_frr <- FRR(edb_mwi)
+edb_frr_active <- FRR(edb_mwi, F)
 
-#+ FRR_2_models, fig.cap = 'Fertility rate ratio between model with and without sexual debut', include=TRUE
-joint_frr %>%
-    filter(
-        # as.numeric(substr(agr, 1, 2)) <= 20, 
-        year >= 1976
-    ) %>%
-    ggplot(aes(year, frr, color = "EPP")) +
+bind_rows(
+    epp_frr$frr %>% as.data.table(1) %>% pivot_longer(-rn),
+    edb_frr$frr %>% as.data.table(1) %>% pivot_longer(-rn),
+    edb_frr_active$frr %>% as.data.table(1) %>% pivot_longer(-rn),
+    .id = "model"
+) %>%
+    type.convert() %>%
+        filter(rn %in% c("15-19", "20-24", "25-29")) %>%
+        mutate(model = c("epp", "eppdb", "eppdb_active")[model]) %>%
+        ggplot(aes(name, value, color = rn, linetype = model)) +
+        facet_wrap(~rn) +
         geom_line() +
-        geom_line(aes(y = frr_active, color = "EPPDB")) +
-        facet_wrap(~agr, scales = "free_y") +
-        labs(title = "Fertility rate ratio", y = "FRR")
+        labs(subtitle = 'eppdb_active: FRR on sexually active', color = 'Age-group')
 
-ggsave(here('fig/FRR_MW.png'), width = 7, height = 4)
-ggsave(here('fig/FRR_ZMB.png'), width = 7, height = 4)
+ggsave(here("fig/FRR_ZMB.png"), width = 7, height = 4)
 
 #+ FR_2_models, fig.cap = 'Fertility rate between model with and without sexual debut', include=TRUE
 joint_frr %>%

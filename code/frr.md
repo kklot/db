@@ -117,21 +117,8 @@ $FRR_{20-24,s}^{CD4}$.
 # Results
 
 ## Estimated FR among HIV+ and HIV- 
-
-### Malawi
-
-![FR_MW](../fig/FR_MW.png)
-
-![FRR_MW](../fig/FRR_MW.png)
-
 ### Zambia
-
-![FR_ZMB](../fig/FR_ZMB.png)
 
 ![FRR_ZMB](../fig/FRR_ZMB.png)
 
-both and sexually active
-
-- number HIV+ in each age-group
-- prev pregnant age-group
-- ASFR by age-group
+![ART COVERAGE](../fig/ART_COV_ZMB.png)
