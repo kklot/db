@@ -90,7 +90,8 @@ $$B^{*}_{a,t} = \frac{1}{2} \left(N^{*}_{a, t} + N^{*}_{a, t-1}\right) ASFR^{*}_
 The prevalence $\rho$ is calculated as
 
 $$b_{a,t} = \sum_{s=1}^{7} FRR_{a,s}^{CD4}F_{a,s,t}^{+,*} +
-\sum_{s=1}^{7}\sum_{d=1}^{3}FRR_{a,s,d,t}^{ART} F_{a,s,d,t}^{+,ART},$$
+\sum_{s=1}^{7}\sum_{d=1}^{3}FRR_{a,s,d}^{ART} F_{a,s,d,t}^{+,ART},$$
+
 $$\rho_{a,t} = \dfrac{b_{a,t}}{F_{a,t}^{-} + b_{a,t}} =
 \dfrac{B_{a,t}^{+}}{B_{a,t}^{+} + B_{a,t}^{-}}.$$
 
