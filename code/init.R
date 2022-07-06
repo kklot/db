@@ -5,15 +5,6 @@ library(data.table)
 library(dplyr)
 library(tidyr)
 
-#' # Aims
-#' 
-#' - Run model with sexual debut = 1 and compare with base model
-#' - Run model with sexual debut rate but settings AFSR and FRR of 15-19 to 20-24
-#'     - Compare fit
-#'     - Compare MTCT
-#' ## Check model
-#' 
-
 devtools::load_all("~/Code/R/ktools")
 devtools::load_all("~/Github/eppasm", recompile = TRUE)
 

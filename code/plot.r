@@ -26,29 +26,109 @@ run_a_model <- function(fit, name = "epp", vs = "R") {
     list(mod = simmod(fp), fp = fp, pa = pa)
 }
 
-# eppasm::popEPP$debug("infect_spec")
-# run_a_model(res$MWI, 'eppdb_MWI')
-# devtools::load_all('~/GitHub/eppasm')
-
 #' # Outputs:
 #'
-#' ## Prevalence in pregnant and non-pregnant women over time, age 15-19, 20-24
+# Data and simulated
+likedat <- res$MWI$fits$epp_MWI$likdat
+
+mwi_epp <- run_a_model(res$MWI, "epp_MWI")
+mwi_edb <- run_a_model(res$MWI, "eppdb_MWI")
+
+#' ## Prevalence 15-49 by age-group
+sim_prevagr <- calc_prev_agegr(mwi_epp$mod, seq(15, 55, 5)) %>%
+    bind_rows(
+        calc_prev_agegr(mwi_edb$mod, seq(15, 55, 5)),
+        .id = "model"
+    ) %>%
+    mutate(model = char(EPP, EPPDB)[as.numeric(model)])
+
+young <- c('15-19', '20-24', '25-29')
+
+sim_prevagr %>%
+    filter(agegr %in% young) %>%
+    ggplot(aes(year, prev, color = sex)) +
+    facet_grid(vars(sex), vars(agegr), scales = "free_y") +
+    geom_line(aes(linetype = model)) +
+    geom_pointrange(aes(ymin = ci_l, ymax = ci_u), size = .2,
+                    data = likedat$hhs |> filter(agegr %in% young)) +
+    scale_colour_manual(values = okabe) +
+    theme(axis.text.x = element_text(angle = 45)) +
+    scale_y_continuous(labels = scales::percent) +
+    labs(title = "Malawi - HIV age-group specific prevalence")
+
+ggsave(here('fig/mw_agr_prev.png'), width = 7, height = 4)
+
+#' ## Prevalence in pregnant women over time
 #'
-mwi_epp <- run_a_model(res$MWI, "epp_MWI")$mod$pregprev_agr %>%
-    as_tibble() %>%
-    rename_with(~ paste0("y_", 1:52)) %>%
-    mutate(agr = ago) %>%
-    pivot_longer(-agr, names_sep = "_", names_to = c(NA, "year")) %>%
-    mutate(year = as.numeric(year)) 
+pregprev1549 <- agepregprev(
+    mwi_epp$mod, mwi_epp$fp,
+    aidx = 1, agspan = 35, yidx = 1:48, expand = TRUE
+)
+pregprev1549db <- agepregprev(
+    mwi_edb$mod, mwi_edb$fp,
+    aidx = 1, agspan = 35, yidx = 1:48, expand = TRUE
+)
 
-mwi_edb <- run_a_model(res$MWI, "eppdb_MWI")$mod$pregprev_agr %>%
-    as_tibble() %>%
-    rename_with(~ paste0("y_", 1:52)) %>%
-    mutate(agr = agdb) %>%
-    pivot_longer(-agr, names_sep = "_", names_to = c(NA, "year")) %>%
-    mutate(year = as.numeric(year)) 
+likedat$ancrtcens.dat  |> 
+    filter(country == "Malawi")  |> 
+    mutate(
+        ul = prev + 1.96 * sqrt(v.ancrt),
+        ll = prev - 1.96 * sqrt(v.ancrt)) |> 
+    ggplot() +
+    geom_line(aes(year, prev, color = site), alpha = .5, data = likedat$ancsite.dat$df) +
+    geom_line(aes(year, prev, color = site, linetype = site), size = 1.2, data = tibble(
+        year = 1970:2017, 
+        prev = pregprev1549db, 
+        site = "National DB"
+    )) +
+    geom_line(aes(year, prev, color = site, linetype = site), size = 1.2, data = tibble(
+        year = 1970:2017, 
+        prev = pregprev1549, 
+        site = "National EPP"
+    )) +
+    geom_pointrange(aes(year, prev, ymin = ll, ymax = ul), size = .7) +
+    scale_y_continuous(labels = scales::percent) +
+    labs(
+        title = "Fitted to HIV prevalence in ANC sites and census", 
+        linetype = "Model"
+    ) +
+    guides(color = 'none')
 
-#+ preg_prev_mwi, fig.cap = 'Prevalence in pregnant women', include = TRUE
+savePNG(here('fig/MW_ANC_National_Prev'), 7, 7)
+ 
+#' ## Prevalence in pregnant women over time by age-group
+#'
+pregprev1549_agr <- agepregprev(
+    mwi_epp$mod, mwi_epp$fp,
+    aidx = seq(1, 35, 5), agspan = 5, yidx = 1:48, expand = TRUE
+)
+
+pregprev1549db_agr <- agepregprev(
+    mwi_edb$mod, mwi_edb$fp,
+    aidx = seq(1, 35, 5), agspan = 5, yidx = 1:48, expand = TRUE
+)
+
+options(ggplot2.discrete.color = okabe)
+
+tibble(
+    prev_EPP = pregprev1549_agr,
+    prev_EDB = pregprev1549db_agr, 
+    agegr = rep(1:7, times = 48),
+    year = rep(1969+1:48, each = 7)) |> 
+    filter(agegr < 4) |>
+    pivot_longer(
+        -c('agegr', 'year'), names_to = c(NA, 'model'), names_sep = '_', 
+        values_to = 'prev') |> 
+    mutate(agegr = agr[agegr]) |> 
+    ggplot() +
+    geom_line(aes(year, prev, color = model)) +
+    facet_wrap(~agegr) +
+    scale_y_continuous(labels = scales::percent) +
+    scale_color_manual(values = okabe) +
+    labs(title = 'Pregnant prevalence by age-group', y = "Prevalence")
+
+savePNG(here('fig/MW_Pregnant_Age_Group'), 7, 3.5)
+
 mwi_epp %>%
     filter(as.numeric(substr(agr, 1, 2)) <= 25) %>%
     bind_rows(
