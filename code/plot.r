@@ -112,20 +112,23 @@ options(ggplot2.discrete.color = okabe)
 
 tibble(
     prev_EPP = pregprev1549_agr,
-    prev_EDB = pregprev1549db_agr, 
+    prev_EDB = pregprev1549db_agr,
     agegr = rep(1:7, times = 48),
-    year = rep(1969+1:48, each = 7)) |> 
+    year = rep(1969 + 1:48, each = 7)
+) |>
     filter(agegr < 4) |>
     pivot_longer(
-        -c('agegr', 'year'), names_to = c(NA, 'model'), names_sep = '_', 
-        values_to = 'prev') |> 
-    mutate(agegr = agr[agegr]) |> 
+        -c("agegr", "year"),
+        names_to = c(NA, "model"), names_sep = "_",
+        values_to = "prev"
+    ) |>
+    mutate(agegr = agr[agegr]) |>
     ggplot() +
     geom_line(aes(year, prev, color = model)) +
     facet_wrap(~agegr) +
     scale_y_continuous(labels = scales::percent) +
     scale_color_manual(values = okabe) +
-    labs(title = 'Pregnant prevalence by age-group', y = "Prevalence")
+    labs(title = "Pregnant prevalence by age-group", y = "Prevalence")
 
 savePNG(here('fig/MW_Pregnant_Age_Group'), 7, 3.5)
 
