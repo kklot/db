@@ -148,19 +148,15 @@ mwi_epp %>%
 
 #' ## Prevalence in sexually active/non-sexually active over time, age 15-19, 20-24
 #'
-# TODO need to check this
-# mwi_edb$vpop[,,2,] %>% sum
-# (mwi_edb$vpophiv %>% sum) + (mwi_edb$vpopart %>% sum)
-mwi_edb <- run_a_model(res$MWI, "eppdb_MWI")$mod
-mwi30 <- mwi_edb$data[1:16, , , ]
-mwi30a <- mwi30 - mwi_edb$vpop
+mwi30 <- mwi_edb$mod$data[1:16, , , ]
+mwi30a <- mwi30 - mwi_edb$mod$vpop
 
 mwi30a %<>%
     as.data.table() %>%
     rename_with(~ c("age", "sex", "hiv", "year", "size")) %>%
     mutate(sexual='active')
 
-mwi30n <- mwi_edb$vpop %>%
+mwi30n <- mwi_edb$mod$vpop %>%
     as.data.table() %>%
     rename_with(~ c("age", "sex", "hiv", "year", "size")) %>%
     mutate(sexual = "nonactive")
@@ -174,23 +170,36 @@ mwi30a %>%
         sex = c('male', 'female')[sex]
     ) %>%
     filter(age != 30) %>%
-        group_by(sex, year, sexual, agr) %>%
-        summarise(
-            prev = sum(`2`) / sum(`1` + `2`)
-        ) %>%
-        allot(mwi30)
+    group_by(sex, year, sexual, agr) %>%
+    summarise(prev = sum(`2`) / sum(`1` + `2`)) %>%
+    allot(mwi30)
 
 #+ prev_active_mwi, fig.cap = 'Prevalence in sexually active and non-active', include=TRUE
 mwi30 %>%
-    ggplot(aes(year, prev, color = sexual)) +
-    facet_grid(vars(sex), vars(agr)) +
+    ggplot(aes(year, prev, color = sex)) +
+    facet_grid(vars(sexual), vars(agr), scales = 'free', switch = 'y') +
     geom_line() +
-    scale_y_continuous(labels = scales::percent, trans = "log") +
+    scale_y_continuous(labels = scales::percent, position = 'right') +
     scale_x_continuous(labels = \(x) x + 1969) +
     labs(
-        title = "Prevalence in sexually active/nonactive by age-group MWI",
-        y = "log(Prevalence)"
-    )
+        title = "HIV prevalence by sexual status and age-group",
+        y = "Prevalence", x = 'Year'
+    ) +
+    theme(
+        axis.title.y.right = element_text(angle = 0, vjust = 1.05, hjust = 1, margin = margin(l = -20)),
+        axis.text.x = element_text(size = 7, angle = 0), 
+        axis.text.y = element_text(size = 7), 
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(colour = 'grey95'), 
+        strip.background = element_rect(fill = '#FCF4DC', color =NA),
+        strip.text = element_text(face = 'bold'),
+        legend.position = c(.9, .)
+    ) +
+    guides(color = guide_legend(direction = 'horizontal')) +
+    coord_cartesian(expand = T) +
+    scale_color_manual(values = okabe)
+
+savePNG(here('fig/prev_agr_sex_status'), 7, 4)
 
 #' ## HIV+ : HIV- fertility rate/ratio over time
 #'
