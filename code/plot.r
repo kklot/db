@@ -11,6 +11,7 @@ devtools::load_all("~/Code/R/ktools/")
 devtools::load_all("~/Github/eppasm")
 library(tidyverse)
 char <- ktools::char
+options(ggplot2.discrete.fill = okabe, ggplot2.discrete.colour = okabe)
 
 ago <- c('15-16', '17-19', '20-24', '25-29', '30-34', '35-39', '40-44', '45-49')
 agdb <- c(15:30, "31-34", "35-39", "40-44", "45-49")
@@ -25,6 +26,16 @@ run_a_model <- function(fit, name = "epp", vs = "R") {
     fp$VERSION <- vs
     list(mod = simmod(fp), fp = fp, pa = pa)
 }
+
+ktheme <- theme(
+    axis.title.y.right = element_text(angle = 0, vjust = 1.05, hjust = 1, margin = margin(l = -20)),
+    axis.text.x = element_text(size = 7, angle = 0),
+    axis.text.y = element_text(size = 7),
+    panel.grid.minor = element_blank(),
+    panel.grid.major = element_line(colour = "grey95"),
+    strip.background = element_rect(fill = "#FCF4DC", color = NA),
+    strip.text = element_text(face = "bold")
+)
 
 #' # Outputs:
 #'
