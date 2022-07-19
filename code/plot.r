@@ -22,7 +22,7 @@ ago <- c('15-16', '17-19', '20-24', '25-29', '30-34', '35-39', '40-44', '45-49')
 agdb <- c(15:30, "31-34", "35-39", "40-44", "45-49")
 agr <- c('15-19', '20-24', '25-29', '30-34', '35-39', '40-44', '45-49')
 young <- c('15-19', '20-24', '25-29')
-res <- readRDS(here("fit/res.rds"))
+
 ktheme <- theme(
     axis.title.y.right = element_text(angle = 0, vjust = 1.05, hjust = 1, margin = margin(l = -20)),
     axis.text.x = element_text(size = 7, angle = 0),
@@ -42,12 +42,38 @@ run_a_model <- function(fit, name = "epp", vs = "R") {
 }
 
 #' # Outputs:
-#'
+res <- readRDS(here("fit/res.rds"))
+
+ipd <- readRDS(system.file('extdata', 'inputs_nat.rds', package = 'eppasm'))
+iso <- tibble(
+    iso2 = names(ipd),
+    iso3 = countrycode::countrycode(iso2, "iso2c", "iso3c")
+)  %>% 
+drop_na()
+
+names(res)  <- iso$iso3
+
 # Data and simulated
-likedat <- res$MWI$fits$epp_MWI$likdat
+likedat <- res[[isocode]]$fits[[paste0('EPP_', isocode)]]$likdat
 
 mwi_epp <- run_a_model(res$MWI, "epp_MWI")
 mwi_edb <- run_a_model(res$MWI, "eppdb_MWI")
+# Basic r_t
+tibble(
+    model_EPP = epp$fp$rvec, 
+    model_EBD = edb$fp$rvec, 
+    time = seq_along(epp$fp$rvec)
+) %>% 
+pivot_longer(-time, names_sep = '_', names_to = c(NA, 'model')) %>% 
+ggplot() + 
+    geom_line(aes(time, value, color = model))  +
+    scale_y_continuous(trans = 'log', breaks = c(0, .1, .2, .3, .4, .5)) +
+    scale_x_continuous(labels = function(x) x / 10 + 1970) +
+    ktheme +
+    labs(title = 'Transmission rate over time', x = 'Year', y = 'r(t)') +
+    theme(legend.position = c(.9, .9))
+
+savePNG(here("fig", isocode, 'r_t_estimate.png'), 7, 4)
 
 #' FRR in EPP vs EDB
 frrcd4 <- epp$fp$frr_cd4  %>% 
@@ -72,22 +98,7 @@ sim_prevagr <- calc_prev_agegr(epp$mod, seq(15, 55, 5)) %>%
     ) %>%
     mutate(model = char(EPP, EDB)[as.numeric(model)])
 
-sim_prevagr %>%
-    filter(agegr %in% young) %>%
-    ggplot(aes(year, prev, color = sex)) +
-    facet_grid(vars(sex), vars(agegr), scales = "free_y") +
-    geom_line(aes(linetype = model)) +
-    geom_pointrange(aes(ymin = ci_l, ymax = ci_u), size = .2,
-                    data = likedat$hhs |> filter(agegr %in% young)) +
-    scale_colour_manual(values = okabe) +
-    theme(axis.text.x = element_text(angle = 45)) +
-    scale_y_continuous(labels = scales::percent) +
-    labs(title = "Malawi - HIV age-group specific prevalence")
-
-ggsave(here('fig', isocode, 'mw_agr_prev.png'), width = 7, height = 4)
-
 #' ## Prevalence in pregnant women over time
-#'
 pregprev1549 <- agepregprev(
     epp$mod, epp$fp,
     aidx = 1, agspan = 35, yidx = 1:48, expand = TRUE
@@ -98,7 +109,6 @@ pregprev1549db <- agepregprev(
 )
 
 likedat$ancrtcens.dat  |> 
-    filter(country == "Malawi")  |> 
     mutate(
         ul = prev + 1.96 * sqrt(v.ancrt),
         ll = prev - 1.96 * sqrt(v.ancrt)) |> 
@@ -118,11 +128,12 @@ likedat$ancrtcens.dat  |>
     scale_y_continuous(labels = scales::percent) +
     labs(
         title = "Fitted to HIV prevalence in ANC sites and census", 
-        linetype = "Model"
+        linetype = "Model", y = "Prevalence"
     ) +
+    theme(legend.position = c(.1, .9)) +
     guides(color = 'none')
 
-savePNG(here('fig', isocode, 'MW_ANC_National_Prev'), 7, 7)
+savePNG(here('fig', isocode, 'ANC_National_Prev'), 7, 7)
  
 #' ## Prevalence in pregnant women over time by age-group
 #'
@@ -144,27 +155,10 @@ tibble(
 ) %>%
 allot(pregprev_tb)
 
-pregprev_tb |> 
-    filter(agegr < 4) |>
-    pivot_longer(
-        -c("agegr", "year"),
-        names_to = c(NA, "model"), names_sep = "_",
-        values_to = "prev"
-    ) |>
-    mutate(agegr = agr[agegr]) |>
-    ggplot() +
-    geom_line(aes(year, prev, color = model)) +
-    facet_wrap(~agegr) +
-    scale_y_continuous(labels = scales::percent) +
-    scale_color_manual(values = okabe) +
-    labs(title = "Pregnant prevalence by age-group", y = "Prevalence")
-
-savePNG(here('fig', isocode, 'MW_Pregnant_Age_Group'), 7, 3.5)
-
 #' ## Combining general prevalence and pregmant
 
 prevboth <- bind_rows(
-    sim_prevagr %>% mutate(model = if_else(model == "EPPDB", "EDB", "EPP")),
+    sim_prevagr,
     pregprev_tb  %>% 
     pivot_longer(-c(agegr, year), names_sep = '_', names_to = c(NA, 'model'), values_to = 'prev') %>% 
     mutate(sex = 'female', agegr = agr[agegr]), 
@@ -172,9 +166,6 @@ prevboth <- bind_rows(
 ) %>% 
 mutate(pop = char('General', "Pregnant")[as.numeric(pop)]) %>% 
 mutate(pop = if_else(pop == 'General', paste(pop, '-', sex), pop))
-
-geom_pointrange(aes(ymin = ci_l, ymax = ci_u), size = .2,
-                    data = likedat$hhs |> filter(agegr %in% young))
 
 hhs_dt <- likedat$hhs |> filter(agegr %in% young) %>% 
 rename(prev_dt = prev) %>% 
@@ -199,7 +190,6 @@ ggplot() +
         angle = 0, vjust = 1, hjust = 1, margin = margin(l = -20)))
 
 savePNG(here('fig', isocode, 'combined_preg_general'), 7, 6)
-resize(7, 7)
 
 #' ## Prevalence in non-pregnant women over time, by age group 15-19, 20-24
 # how to do this?
@@ -244,26 +234,83 @@ mwi30 %>%
         title = "HIV prevalence by sexual status and age-group",
         y = "Prevalence", x = 'Year', color = ''
     ) +
-    theme(
-        axis.title.y.right = element_text(angle = 0, vjust = 1.05, hjust = 1, margin = margin(l = -20)),
-        axis.text.x = element_text(size = 7, angle = 0), 
-        axis.text.y = element_text(size = 7), 
-        panel.grid.minor = element_blank(),
-        panel.grid.major = element_line(colour = 'grey95'), 
-        strip.background = element_rect(fill = '#FCF4DC', color =NA),
-        strip.text = element_text(face = 'bold'),
-        legend.position = c(1, 1.13)
-    ) +
+    ktheme +
+    theme(legend.position = c(1, 1.13)) +
     guides(color = guide_legend(direction = 'horizontal')) +
     coord_cartesian(expand = T) +
     scale_color_manual(values = okabe)
 
 savePNG(here('fig', isocode, 'prev_agr_sex_status'), 7, 4)
 
+# Proportion of sexually active among HIV positive
+
+mwi30a %>%
+    bind_rows(mwi30n) %>% 
+    filter(hiv == 2) %>% 
+    pivot_wider(names_from = sexual, values_from = size) %>% 
+    mutate(
+        age = age + 14,
+        agr = findInterval2(age, c(15, 20, 25, 30)), 
+        sex = c('male', 'female')[sex], 
+        pa = active / (active + nonactive),
+    ) %>% 
+    filter(is.finite(pa)) %>% 
+    filter(year == max(year)) %>% 
+    filter(age < 25) %>%
+    allot(pos_active)
+
+pos_active %>% 
+    ggplot() + 
+        geom_col(aes(age, pa, fill = sex), position = 'dodge') +
+        ktheme +
+        labs(
+            title = 'Proportion of sexually active among HIV positive', 
+            y = '', fill = ''
+        ) +
+        scale_y_continuous(labels = scales::percent) +
+        scale_x_continuous(breaks = 15:24) +
+        theme(legend.position = c(0.07, .95))
+
+savePNG(here('fig', isocode, 'hivpos_active.png'))
+
+# Proportion newly sexual debutted among HIV positive active
+db_long <- edb$fp$db_rate  %>%
+as.data.table(1)  %>% 
+rename_with(~char(age, sex, year, rate))
+
+mwi30n  %>% 
+left_join(db_long)  %>% 
+filter(hiv == 2) %>% 
+mutate(n_next = size * rate, year = year + 1)  %>% 
+select(age, sex, year, n_next) %>% 
+allot(newly_debut_pos)
+
+edb$mod$data %>% unclass() %>% 
+as.data.table(1) %>% 
+rename_with(~char(age, sex, hiv, year, n)) %>% 
+filter(hiv == 2, age <= 16) %>% 
+left_join(newly_debut_pos) %>% 
+mutate(p_db = n_next / n)  %>% 
+allot(p_db_pos)
+
+p_db_pos  %>%
+mutate(age = 14 + age, year = year + 1969, sex = char(male, female)[sex]) %>% 
+filter(age < 20, year %in% c(2005, 2015)) %>%
+ggplot() + 
+    geom_col(aes(age, p_db, fill = factor(sex)), position = 'dodge') +
+    facet_grid(cols = vars(year)) + 
+    labs(title = 'Proportion of newly sexual debuted HIV positive', y = '', fill='') +
+    ktheme +
+    scale_y_continuous(labels = scales::percent) +
+    theme(legend.position = c(0.07, .95))
+
+savePNG(here('fig', isocode, 'hiv_pos_new_debut'), 7, 4)
+
 #' ## HIV+ : HIV- fertility rate/ratio over time
 #'
 agr_i <- c(15, 17, seq(20, 50, 5))
 
+source(here('code/FRR.r'))
 epp_frr <- FRR(epp)
 edb_frr <- FRR(edb)
 
@@ -282,7 +329,7 @@ bind_rows(
     ktheme +
     theme(legend.position = c(.92, .85))
 
-savePNG(here("fig/FRR_MWI.png"), 7, 4)
+savePNG(here("fig", isocode, "FRR.png"), 7, 4)
 
 edb_frr$asfr_p  %>% as.data.table(1) %>% 
 pivot_longer(-rn) %>% 
@@ -344,7 +391,6 @@ ggsave(here('fig', isocode, 'ART_COV_ZMB.png'), width = 7, height = 5)
 
 #' ## HIV incidence rate ratio parameter estimates between the two models
 
-#+ IRR, fig.cap = 'age IRR between the models', include=TRUE, eval=FALSE
 bind_rows(
     epp$fp$incrr_age[, , 1] %>%
         as_tibble() %>%
@@ -356,20 +402,18 @@ bind_rows(
         mutate(model = "EDB", age = 15:80)
 ) %>%
     pivot_longer(-c("model", "age")) %>%
-    filter(age < 50)  %>% 
+    filter(age < 30) %>%
         ggplot(aes(age, value, color = model)) +
         facet_wrap(~name) +
         geom_line() +
         ktheme +
         labs(
-            title = 'Estimate incidence rate ratio by age and sex',
-            y = 'Incidence rate ratio'
+        title = "Estimate incidence rate ratio by age and sex",
+        y = "Incidence rate ratio"
         ) +
         theme(
             legend.position = c(.94, 0.1)
         )
-
 savePNG(here('fig', isocode, 'IRR_age'), 7, 4)
-resize(7, 4)
 
 #' ## % HIV+ 15-19 and 20-24 who are long-term survivors
