@@ -89,18 +89,24 @@ do_cc <- function(iso2, iso3) {
     fit
 }
 
-iso2_list <- countrycode::countrycode(
-    char(malawi, uganda, mozambique, zimbabwe, zambia, rwanda),
-    "country.name", "iso2c"
-)
-iso3_list <- countrycode::countrycode(iso2_list, "iso2c", "iso3c")
+tst <- system.file('extdata', 'inputs_nat.rds', package = 'eppasm')
 
-res <- list()
-for (i in seq_along(iso2_list)) {
-    cat(i)
-    if (iso3_list[i] %in% names(res)) next
-    res[[iso3_list[i]]] <- do_cc(iso2_list[i], iso3_list[i])
-}
+iso <- tibble(
+    iso2 = tst %>% readRDS() %>% names(),
+    iso3 = countrycode::countrycode(iso2, "iso2c", "iso3c")
+)  %>% 
+drop_na()
+
+res <- parallel::mclapply(
+    1:nrow(iso),
+    function(i) {
+        tryCatch(
+            do_cc(iso$iso2[i], iso$iso3[i]), 
+            error = function(e) e
+        )
+    },
+    mc.cores = min(parallel::detectCores(), nrow(iso))
+)
 
 dir.create(here('fit'))
 saveRDS(res, here('fit/res.rds'))
