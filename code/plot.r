@@ -56,8 +56,9 @@ names(res)  <- iso$iso3
 # Data and simulated
 likedat <- res[[isocode]]$fits[[paste0('EPP_', isocode)]]$likdat
 
-mwi_epp <- run_a_model(res$MWI, "epp_MWI")
-mwi_edb <- run_a_model(res$MWI, "eppdb_MWI")
+epp <- run_a_model(res[[isocode]], paste0('EPP_', isocode), 'C')
+edb <- run_a_model(res[[isocode]], paste0('EDB_', isocode), 'K')
+
 # Basic r_t
 tibble(
     model_EPP = epp$fp$rvec, 
