@@ -378,17 +378,6 @@ ggplot() +
 
 savePNG(here('fig', isocode, 'FR_by_mod_agr_status'), 7, 6)
 
-# ART Coverage
-edb_cov <- Cov(edb_mwi)
-bind_rows(edb_cov$cov_a, edb_cov$cov_v, .id = "pop") %>%
-    mutate(pop = char("active", "virgin")[as.numeric(pop)]) %>%
-    ggplot(aes(year, cov, color = factor(stage), linetype = pop)) +
-    geom_line() +
-    facet_grid(vars(sex), vars(agr)) + theme_light() +
-    labs(title='ART coverage by CD4+ stages and sexual activity statuses')
-ggsave(here('fig', isocode, 'ART_COV_ZMB.png'), width = 7, height = 5)
-
-
 #' ## HIV incidence rate ratio parameter estimates between the two models
 
 bind_rows(
