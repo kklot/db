@@ -5,8 +5,14 @@ library(data.table)
 library(dplyr)
 library(tidyr)
 
-devtools::load_all("~/Code/R/ktools")
+# remotes::install_github('jeffeaton/anclik')
+# remotes::install_github('jeffeaton/epp')
+
+# install.packages(c("abind", "anclik", "binom", "fastmatch", "mvtnorm",
+# "RColorBrewer", "reshape2", "BH", "RcppEigen"))
 devtools::load_all("~/Github/eppasm", recompile = TRUE)
+# install.packages(c('txtplot', 'countrycode', 'snakecase', 'ggplot2'))
+devtools::load_all("~/Code/R/ktools")
 
 do_cc <- function(iso2, iso3) {
     fit <- eppasm$new()
@@ -62,15 +68,17 @@ do_cc <- function(iso2, iso3) {
 
     #' # Base model
     fit$fit(
-        paste0("epp", "_", iso3),
+        paste0("EPP", "_", iso3),
         iso2,
+        B0 = 1e3,
         eppmod = "rlogistic", control_optim = control_optim
     )
 
     #' Debut only model
     fit$fit(
-        paste0("eppdb", "_", iso3),
+        paste0("EDB", "_", iso3),
         iso2,
+        B0 = 1e3,
         VERSION = "K",
         eppmod = "rlogistic",
         doParallel = FALSE,
